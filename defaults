@@ -1,0 +1,16 @@
+ARCH=armhf
+#Set this to the suite you want to use testing should work except for some packages.
+SUITE=unstable
+GENIMAGE=no
+TYPE=desktop
+INTERACTIVE=yes
+TASKSEL=no
+MEDIA="invalidmediatype"
+DEVICE=""
+APTITUDE="aptitude -y install"
+# Change this to your own mirror
+MIRROR=http://ftp.us.debian.org/debian
+
+# Kernel version and revision of the kernel package that is in kernels/ dir.
+KERNELVER=2.6.31.14.27-efikamx
+KERNELREV=33456102

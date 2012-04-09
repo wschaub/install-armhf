@@ -1,41 +1,108 @@
 #!/bin/bash
+#Load in defaults
+. ./defaults
+usage(){
+cat <<EOF
+Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] ssd|mmc device [--genimage]
 
-# Change to suite, testing should work except from a few packages
-SUITE=unstable
+Options:
+-a select the arch to use (armel or armhf) default is armhf
 
-# Change this to your own mirror
-MIRROR=http://ftp.XX.debian.org/debian
+-d select the debian distribution (testing, wheezy, unstable etc) default is unstable
 
-# Kernel version and revision of the kernel package that is in kernels/ dir.
-KERNELVER=2.6.31.14.27-efikamx
-KERNELREV=2012.02
-KERNELDEB=linux-image-${KERNELVER}_${KERNELREV}_armhf.deb
+-t select the install type (desktop or minimal) 
+you can define your own set of packages by creating a file named packages.yourtypenamehere
 
-# Change this to 'yes' if you want to also create an .img.xz file
-GENIMAGE=no
+-q  Do not prompt to configure packages
+
+--genimage Generate an image file after setting up the media.
+
+--tasksel Run tasksel after installing the image.
+
+Non option arguments:
+The last two arguments are the media type (ssd or mmc) and the device to install to.
+EOF
+exit 1
+}
 
 if [ $# -lt 2 ]; then
-    echo "Usage: installer-armhf.sh <ssd/mmc> <device> [-genimage]"
+	usage
+fi
+optspec=":qd:t:a:m:-:"
+while getopts "$optspec" optchar; do
+   case "${optchar}" in
+   -)
+   	case "${OPTARG}" in
+	genimage)
+	     GENIMAGE=yes;
+	     ;;
+        tasksel)
+	     TASKSEL=yes
+	     ;;
+        *) usage;;
+        esac;;
+   d)
+      SUITE=$OPTARG;
+      ;;
+   t)
+      TYPE=$OPTARG;
+      ;;
+   a)
+      ARCH=$OPTARG;
+      ;;
+   m)
+      MIRROR=$OPTARG;
+      ;;
+   q)
+      INTERACTIVE=no;
+      export DEBIAN_FRONTEND=noninteractive;
+      ;;
+   *) usage;;
+esac
+done
+#handle non option arguments and do sanity checks
+MEDIA=${!OPTIND}
+OPTIND=$(( $OPTIND + 1))
+DEVICE=${!OPTIND}
+if [ $MEDIA != "mmc" ] && [ $MEDIA != "ssd" ]; then
+	echo "Media type must be either ssd or mmc type $0 -h for more information"
+	exit 1
+fi
+#These have to be here to support armel and armhf kernel images
+#ARCH only gets reset from defaults after getopts processing. 
+KERNELDEB=linux-image-${KERNELVER}_${KERNELREV}_$ARCH.deb
+PREPKERNELDEB=prep-kernel_2.0.0-20110719_$ARCH.deb
+
+#Speical case for minimal install type.
+if [ $TYPE = "minimal" ]
+then
+	DBSOPTS="--variant=minbase"
+	APTITUDE="apt-get -y install"
+fi
+
+if [ -z $DEVICE ] || [ ! -b $DEVICE ]; then
+    echo "$DEVICE is not a valid device! Exiting"
     exit 1
 fi
 
-if [ $1 != "mmc" ] && [ $1 != "ssd" ]; then
-    echo "Usage: installer-armhf.sh <ssd/mmc> <device>"
-    echo "You must select mmc/ssd type of booting (affects boot.scr and fstab). Exiting."
-    exit 1
+if [ ! -f packages.$TYPE ]; then
+	echo "Install type $TYPE is not defined please create a packages.$TYPE file for it"
+	exit 1
 fi
+echo INTERACTIVE=$INTERACTIVE
+echo MIRROR=$MIRROR
+echo ARCH=$ARCH
+echo SUITE=$SUITE
+echo GENIMAGE=$GENIMAGE
+echo TYPE=$TYPE
+echo MEDIA=$MEDIA
+echo DEVICE=$DEVICE
 
-if [ -z $2 ] || [ ! -b $2 ]; then
-    echo "$2 is not a valid device! Exiting"
-    exit 1
-fi
-
-DEVICE=$2
-if [[ $2 =~ \/dev\/mmcblk* ]]; then
+if [[ $DEVICE =~ \/dev\/mmcblk* ]]; then
     echo "MMC card device, partitions named mmcblk*pN..."
     BOOTPART=${DEVICE}p1
     ROOTPART=${DEVICE}p2
-elif [[ $2 =~ \/dev\/sd* ]]; then
+elif [[ $DEVICE =~ \/dev\/sd* ]]; then
     echo "Generic SCSI block device, partitions named sd*N..."
     BOOTPART=${DEVICE}1
     ROOTPART=${DEVICE}2
@@ -44,18 +111,14 @@ else
     exit 1
 fi
 
-if [ $1 == "mmc" ]; then
+if [ $MEDIA == "mmc" ]; then
      BOOTNAME=bootsd
      ROOTNAME=rootsd
-elif [ $1 == "ssd" ]; then
+elif [ $MEDIA == "ssd" ]; then
      BOOTNAME=bootssd
      ROOTNAME=rootssd
 fi
 
-if [ $# == 3 ] && [ $3 == "-genimage" ]; then
-    echo "Will generate compressed image from $2"
-    GENIMAGE=yes
-fi
 
 echo "Will create partitions $BOOTNAME, $ROOTNAME on $BOOTPART, $ROOTPART, resp."
 
@@ -88,16 +151,16 @@ if [ $WILL_FORMAT != "yes" ]; then
 fi 
 
 echo -n "creating MSDOS label on the device..."
-parted $2 --script -- mklabel msdos
+parted $DEVICE --script -- mklabel msdos
 echo "done"
 
 echo -n "creating 128MB boot partition..."
-parted $2 --align optimal --script -- mkpart primary 1 128
-parted $2 --script -- set 1 boot on
+parted $DEVICE --align optimal --script -- mkpart primary 1 128
+parted $DEVICE --script -- set 1 boot on
 echo "done"
 
 echo -n "creating root partition..."
-parted $2 --align optimal --script -- mkpart primary 128 -1
+parted $DEVICE --align optimal --script -- mkpart primary 128 -1
 echo "done"
 
 echo -n "preparing boot partition in $BOOTPART..."
@@ -119,7 +182,7 @@ if [ -d $TARGETROOT ]; then
 fi
 
 echo "running debootstrap:"
-debootstrap --arch=armhf $SUITE $TARGETROOT $MIRROR
+debootstrap $DBSOPTS --arch=$ARCH $SUITE $TARGETROOT $MIRROR
 if [ $? != 0 ]; then
     echo "error on debootstrap, exiting!"
     exit 1
@@ -132,23 +195,43 @@ chmod +x $TARGETROOT/usr/sbin/policy-rc.d
 echo "done"
 
 echo "installing extra packages:"
-cp packages.extra $TARGETROOT/
+cp packages.$TYPE $TARGETROOT/packages.extra
+if [ "$TASKSEL" = "yes" ]; then
+    echo tasksel >>$TARGETROOT/packages.extra
+fi
 mount -o bind /proc $TARGETROOT/proc
 mount -o bind /dev $TARGETROOT/dev
 mount -o bind /dev/pts $TARGETROOT/dev/pts
-chroot $TARGETROOT dpkg-reconfigure locales
-chroot $TARGETROOT aptitude -y install `cat packages.extra`
+#temporarily disable debconf prompts so we don't prompt to configure things
+#twice.
+export DEBIAN_FRONTEND=noninteractive
+chroot $TARGETROOT $APTITUDE `cat $TARGETROOT/packages.extra`
+if [ "$INTERACTIVE" = "yes" ]; then
+    chroot $TARGETROOT $APTITUDE locales console-setup tzdata user-setup
+    unset DEBIAN_FRONTEND
+    chroot $TARGETROOT dpkg-reconfigure locales
+    chroot $TARGETROOT dpkg-reconfigure console-setup
+    chroot $TARGETROOT dpkg-reconfigure tzdata
+    chroot $TARGETROOT user-setup
+fi
+if [ "$TASKSEL" = "yes" ]; then
+    chroot $TARGETROOT tasksel --new-install
+fi
 chroot $TARGETROOT apt-get clean
 rm $TARGETROOT/packages.extra
 rm $TARGETROOT/usr/sbin/policy-rc.d
 echo "done installing"
 
-echo -n "setting up ngetty..."
-sed -r -e "s,^([2-6]*):23:,#\1:23:," $TARGETROOT/etc/inittab >$TARGETROOT/etc/inittab.copy
-sed -r -e "s,1:2345:respawn:/sbin/getty 38400 tty1,1:2345:respawn:/sbin/ngetty tty1 tty2 tty3 tty4 tty5 tty6," $TARGETROOT/etc/inittab.copy >$TARGETROOT/etc/inittab
-rm -f $TARGETROOT/etc/inittab.copy
-rm -f $TARGETROOT/etc/rc*.d/S*ngetty
-echo "done"
+#only set up ngetty if it exists in our packages file
+grep ngetty packages.$TYPE >/dev/null
+if [ $? -eq 0 ]; then
+	echo -n "setting up ngetty..."
+	sed -r -e "s,^([2-6]*):23:,#\1:23:," $TARGETROOT/etc/inittab >$TARGETROOT/etc/inittab.copy
+	sed -r -e "s,1:2345:respawn:/sbin/getty 38400 tty1,1:2345:respawn:/sbin/ngetty tty1 tty2 tty3 tty4 tty5 tty6," $TARGETROOT/etc/inittab.copy >$TARGETROOT/etc/inittab
+	rm -f $TARGETROOT/etc/inittab.copy
+	rm -f $TARGETROOT/etc/rc*.d/S*ngetty
+	echo "done"
+fi
 
 echo -n "setting up serial on mxc..."
 sed -e "s,#T0:23:respawn:/sbin/getty -L ttyS0 9600 vt100,T0:23:respawn:/sbin/getty -L ttymxc0 115200 vt100," $TARGETROOT/etc/inittab >$TARGETROOT/etc/inittab.copy
@@ -167,6 +250,17 @@ mv $TARGETROOT/etc/rc.local.copy $TARGETROOT/etc/rc.local
 chmod +x $TARGETROOT/etc/rc.local
 echo "done"
 
+echo "setting up /etc/modules"
+echo gpu >>$TARGETROOT/etc/modules
+echo snd-soc-imx-3stack-sgtl5000 >>$TARGETROOT/etc/modules
+
+TARGETBOOT=$TARGETROOT/boot
+if [ -d $TARGETBOOT ]; then
+    echo "mounting $BOOTPART to $TARGETBOOT..."
+    mount $BOOTPART $TARGETBOOT
+    echo "done"
+fi
+
 echo "installing kernel:"
 cp kernels/$KERNELDEB $TARGETROOT/
 chroot $TARGETROOT dpkg -i $KERNELDEB
@@ -183,16 +277,9 @@ if [ -f $TARGETROOT/boot/initrd.img-$KERNELVER ]; then
 fi
 # boot.scr
 echo "preparing boot.scr:"
-cp boot.script.$1 $TARGETROOT/boot/boot.script
+cp boot.script.$MEDIA $TARGETROOT/boot/boot.script
 chroot $TARGETROOT mkimage -A arm -O linux -T script -C none -a 0x0 -e 0x0 -n "EfikaMX Linux script" -d /boot/boot.script /boot/boot.scr
 echo "done preparing uImage,uInitrd,boot.scr."
-
-TARGETBOOT=`mktemp -d`
-if [ -d $TARGETBOOT ]; then
-    echo "mounting $BOOTPART to $TARGETBOOT..."
-    mount $BOOTPART $TARGETBOOT
-    echo "done"
-fi
 
 echo -n "copying uImage/uInitrd/boot.scr to $BOOTPART..."
 cp $TARGETROOT/boot/uImage-$KERNELVER $TARGETBOOT/
@@ -204,13 +291,23 @@ fi
 cp $TARGETROOT/boot/boot.scr* $TARGETBOOT/
 echo "done"
 
+echo "Installing prep-kernel"
+cp kernels/$PREPKERNELDEB $TARGETROOT
+chroot $TARGETROOT dpkg -i $PREPKERNELDEB
+rm $TARGETROOT/$PREPKERNELDEB
+
+#we already run user-setup in interactive mode, fallback to this if we aren't
+#interactive.
+if [ "$INTERACTIVE" = "no" ]; then
 echo -n "setting up root password..."
 echo "root:root" | chroot $TARGETROOT chpasswd
 echo "done"
+fi
 
 echo -n "setting up fstab..."
-echo "LABEL=$ROOTNAME\t\t/\t\text4\t\tdefaults\t\t0\t0" >$TARGETROOT/etc/fstab
-echo "proc\t\t/proc\t\tproc\t\tdefaults\t\t0\t0" >>$TARGETROOT/etc/fstab
+echo -e "LABEL=$ROOTNAME\t\t/\t\text4\t\tdefaults\t\t0\t0" >$TARGETROOT/etc/fstab
+echo -e "LABEL=$BOOTNAME\t\t/boot\t\tauto\t\tdefaults\t\t0\t0" >>$TARGETROOT/etc/fstab
+echo -e "proc\t\t/proc\t\tproc\t\tdefaults\t\t0\t0" >>$TARGETROOT/etc/fstab
 echo "done"
 
 echo -n "setting up hostname..."
@@ -223,17 +320,16 @@ echo "done"
 
 #image is done.
 echo -n "unmounting filesystems..."
+umount $TARGETBOOT
 umount $TARGETROOT/proc
 umount $TARGETROOT/dev/pts
 umount $TARGETROOT/dev
 umount $TARGETROOT
-umount $TARGETBOOT
 echo "done"
 
-rm -rf $TARGETBOOT
 rm -rf $TARGETROOT
 
 if [ $GENIMAGE == "yes" ]; then
-   echo "Compressing image into armhf-$SUITE.xz"
-   dd if=$2 bs=32768 |pv | xz -0 - >armhf-$SUITE.xz
+   echo "Making image $ARCH-$SUITE.img"
+   dd if=$DEVICE bs=32768 |pv >$ARCH-$SUITE.img
 fi
