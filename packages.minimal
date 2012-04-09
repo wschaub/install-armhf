@@ -1,6 +1,8 @@
 locales
 wicd-curses
+u-boot
 u-boot-tools
+parted
 whois
 initramfs-tools
 busybox
