@@ -1,0 +1,12 @@
+install-armhf is a tool created by Konstantinos Margaritis that does the following:
+1) partitions and puts filesystems on either an SD card or internal SSD drive
+
+2) runs debootstrap to put a full debian root filesystem on the drive
+
+3) adds extra packages to the image
+
+4) applies any Efika MX specific tweaks to the default debian system.
+
+5) installs the Efika MX kernel and sets up the boot script.
+
+I intend to make modifications to this script in this github repo. you can find the original at http://people.debian.org/~markos/armhf/efika-installer/install-armhf.tar.xz
