@@ -1,0 +1,271 @@
+#!/bin/bash 
+
+. /lib/lsb/init-functions
+
+INSTALLDIR="/home/oem"
+ROOTFS="${INSTALLDIR}/root.tar.xz"
+
+machine=$(grep "^Hardware" /proc/cpuinfo | sed 's/Hardware\s*:\s*//')
+case "$machine" in
+	"Genesi Efika MX (Smartbook)")
+		board=efikasb
+	;;
+	"Genesi Efika MX (Smarttop)")
+		board=efikamx
+		btype=$(grep "^Revision" /proc/cpuinfo | sed 's/Revision\s*:\s*//')
+
+		case "$btype" in
+			"51020")
+				machine="${machine} (TO2)"
+			;;
+			"51025")
+				machine="${machine} (TO2)"
+			;;
+			"51030")
+				machine="${machine} (TO3)"
+			;;
+		esac
+	;;
+esac
+
+# find an ethernet device, but not eth0 on smartbook as it's probably a usb dongle
+if [ "x${board}" == "efikasb" ]; then
+	if [ -h "/sys/class/net/wlan0" ]; then
+		eth="wlan0"
+	fi
+else
+	if [ -h "/sys/class/net/eth0" ]; then
+		eth="eth0"
+	elif [ -h "/sys/class/net/wlan0" ]; then
+		eth="wlan0"
+	fi
+fi
+
+if [ "x${eth}" != "x" ]; then
+	mac=$(ifconfig ${eth} | grep HWaddr | awk '{print $5}' | sed 's/://g')
+fi
+
+
+ANSIGREEN="\033[1;32m"
+ANSIWHITE="\033[1;37m"
+ANSIRESET="\033[0m"
+
+function pecho
+{
+    echo $1
+}
+
+function checkwhoami
+{
+	if [ ! `whoami` == "root" ]; then
+		pecho "You must run this tool as root!"
+		sleep 10
+		exit -1
+	fi
+}
+
+function checkboard
+{
+	# enable hard disk light for smartbook to show activity
+	pecho "Welcome to the ${machine}"
+	sleep 5
+}
+
+function checkconfirm
+{
+	pecho "WARNING: CONTINUING WILL ERASE ALL USER DATA (Y/N)"
+	rm -f .keypress
+
+	if [ "${TESTING}" = "x" ]; then
+		plymouth watch-keystroke --keys="yYnN" --command="tee .keypress"
+		# consider only first keypress!
+		KP=$(head -c1 .keypress)
+	else
+		read -n1 -t30 KP
+	fi
+
+	if [ "${KP}" = "Y" ] || [ "${KP}" = "y" ]; then
+		return
+	else
+		pecho "Cancelling OS install, dropping to a terminal.."
+		sleep 3
+		# get rid of persistent naming rule on installer sd
+		echo >"/${UDEVRULE}"
+		# drop to terminal
+		exit 0
+	fi
+}
+
+SSD="sda"
+PATASSD="/dev/${SSD}"
+PATASSD1="${PATASSD}1"
+PATASSD2="${PATASSD}2"
+PATASWAP="${PATASSD}3"
+
+BOOTMNT="/mnt/patassd/boot"
+ROOTMNT="/mnt/patassd"
+
+UDEVRULE="etc/udev/rules.d/70-persistent-net.rules"
+
+function checkforfile
+{
+	FILETOCHECK=$1
+	if [ ! -e "${FILETOCHECK}" ]; then
+		pecho "${FILETOCHECK} not present. Exiting"
+		exit -1
+	fi
+}
+
+function getcorrecttime
+{
+	echo >"/${UDEVRULE}"
+
+	date=$(date +"%Y%m%d")
+	datefile=$(date --reference=${ROOTFS} +"%Y%m%d")
+	if [ "${date}" -lt "${datefile}" ]; then
+		if [ -h "/sys/class/net/eth0" && $(cat "/sys/class/net/eth0/operstate") == "up"]; then
+			#pecho "Ensuring we have an IP address.."
+			#dhclient eth0
+
+			sleep 2
+
+			pecho "Ensuring we have the correct time.."
+			ntpdate-debian
+
+			# update the time on the rootfs archive
+			touch "${ROOTFS}"
+		else
+			pecho "Faking correct time.."
+			date --set="$(date --reference=${ROOTFS})"
+			pecho "SYSTEM TIME MAY NOT BE CORRECT. PLEASE INSTALL WHILE CONNECTED TO A WIRED NETWORK"
+			sleep 30
+		fi
+	fi
+}
+
+function checkmounts
+{
+	umount ${PATASSD1} ${PATASSD2}
+	umount ${PATASSD1} ${PATASSD2}
+	umount ${PATASSD1} ${PATASSD2}
+	if [ -e "${BOOTMNT}" ] && [ -e "${ROOTMNT}" ]; then
+		pecho "Installing..."
+	else
+		pecho "Creating Temporary Mountpoints and Installing.."
+		mkdir -p ${ROOTMNT}
+		mkdir -p ${BOOTMNT}
+	fi
+}
+
+function makepartitions
+{
+	pecho "Partitioning"
+
+	PARTED="parted -anone -s ${PATASSD} -- unit MB"
+
+	BOOT_START=1
+	BOOT_SIZE=127
+	SWAP_SIZE=576
+
+	${PARTED} mklabel msdos
+	# the space and slash in the regex are because of the SanDisk drive in the Smarttop
+	DISK_SIZE=$(${PARTED} print | awk '/Disk \//{print substr($3, 0, length($3)-1) }')
+	ROOT_SIZE=$((DISK_SIZE - BOOT_SIZE - SWAP_SIZE - BOOT_START))
+
+	ROOT_START=$((BOOT_START + BOOT_SIZE))
+	SWAP_START=$((ROOT_START + ROOT_SIZE))
+
+	${PARTED} mkpart primary ${BOOT_START}MB ${ROOT_START}MB
+	${PARTED} mkpart primary ${ROOT_START}MB ${SWAP_START}MB
+	${PARTED} mkpart primary ${SWAP_START}MB ${DISK_SIZE}MB
+	${PARTED} print
+}
+
+function makefilesystems
+{
+	pecho "Formatting Linux Partition"
+	mkfs.ext4 ${PATASSD2}
+	sync
+	mount ${PATASSD2} ${ROOTMNT}
+
+	pecho "Formatting Boot Partition"
+	mkdir -p ${BOOTMNT}
+	mkfs.ext3 ${PATASSD1}
+	sync
+	mount ${PATASSD1} ${BOOTMNT}
+
+	pecho "Formatting Swap Partition"
+	mkswap -f ${PATASWAP}
+	sync
+}
+
+function doextract
+{
+	EXTRACT="tar --numeric-owner -axf"
+	ARCHIVE="$1"
+ 	DEST="$2"
+	${EXTRACT} "${ARCHIVE}" -C "${DEST}"
+
+#	echo ""
+#	gzip -dc ${ARCHIVE} | pv -s 1629276160 -c | tar --numeric-owner -xf - -C ${DEST} 2>&1
+	sync
+}
+
+function docleanups
+{
+	pecho "Cleanup - Preparing System for First Boot"
+
+	# get rid of persistent network naming rule on target
+	echo>"${ROOTMNT}/${UDEVRULE}"
+
+	# run oem-config on first boot
+	#touch "${ROOTMNT}/var/lib/oem-config/run"
+
+	pecho "Cleanup - Creating Unique Hostname"
+	if [ "x${eth}" != "x" ]; then
+		sed -i -e s/^127\.0\.1\.1.*/127\.0\.1\.1\ $hn/g "${ROOTMNT}/etc/hosts"
+		echo ${board}-${mac} >"${ROOTMNT}/etc/hostname"
+	fi
+
+	pecho "Cleanup - Unmounting Target Directories"
+	cp boot.scr $BOOTMNT/
+        cp fstab $ROOTMNT/etc/
+        chown root:root $ROOTMNT/etc/fstab
+	sync && umount "${BOOTMNT}"
+	sync && umount "${ROOTMNT}"
+
+	# get rid of persistent naming rule on installer sd
+	echo >"/${UDEVRULE}"
+
+	# update the time on the rootfs archive
+	touch "${ROOTFS}"
+}
+
+checkwhoami
+checkboard
+
+checkforfile "${ROOTFS}"
+
+checkmounts
+
+getcorrecttime
+
+checkconfirm
+
+makepartitions
+makefilesystems
+
+pecho "Extracting Linux .."
+doextract "${ROOTFS}" "${ROOTMNT}"
+
+docleanups
+
+if [ "x${TESTING}" = "x" ]; then
+	pecho "Shutting Down in 10 seconds.."
+    pecho "Be sure to remove the SD card before powering back up"
+    pecho "wait for the flashing yellow LED and re-connect to do"
+    pecho "first time setup"
+	sleep 10
+	pecho "Shutting Down"
+	shutdown -h now
+fi

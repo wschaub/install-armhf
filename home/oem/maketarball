@@ -1,0 +1,27 @@
+#!/bin/bash
+
+#
+# $1 = destination directory
+# $2 = compressor. gz, xz, bz2, lzma (nothing else supported unless the compressor name matches the extension)
+#
+
+
+if [ "$2" == "gz" ]; then
+	COMPRESSOR="gzip --no-name --rsyncable"
+	EXTENSION="gz"
+elif [ "$2" == "xz" || "$2" == "lzma" ]; then
+	COMPRESSOR="xz -e"
+	EXTENSION="xz"
+elif [ "$2" == "bz2" ]; then
+	COMPRESSOR="bzip2"
+	EXTENSION="bz2"
+elif [ "x$2" == "x" ]; then
+	# safe default
+	COMPRESSOR="gzip --no-name --rsyncable"
+	EXTENSION="gz"
+else
+	COMPRESSOR="$2"
+	EXTENSION="$2"
+fi
+
+tar --numeric-owner -cf - ./* | pv -s $(du -sb . | awk '{print $1}') | $COMPRESSOR >$1/maverick-$(date +%Y%m%d).tar.$EXTENSION

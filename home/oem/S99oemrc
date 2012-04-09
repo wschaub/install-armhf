@@ -1,0 +1,76 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          oemrc
+# Required-Start:    $remote_fs dbus
+# Required-Stop:     $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Headless OEM config script setup
+# Description:       sets up network services and LEDs for headless installer.
+### END INIT INFO
+#This script is based on the rc.local on the Genesi installer
+#bring up the network interfaces, set the hostname and signal we
+#are insecure, on the network and need to be set up by using the led class
+#in /sys
+
+#if [ -h "/sys/class/net/eth0" ]; then
+#	echo >/etc/udev/rules.d/70-persistent-net.rules
+#	reboot
+#fi
+
+UDEVRULE="/etc/udev/rules.d/70-persistent-net.rules"
+if [ -e "${UDEVRULE}" ]; then
+	rm -f "${UDEVRULE}"
+fi
+
+
+if [ -h "/sys/class/net/eth0" ]; then
+	eth="eth0"
+    #try to grab a DHCP lease, add a static IP address as a fallback
+    dhclient -1 eth0
+    if [ $? -ne 0 ]
+    then
+        ifconfig eth0 up
+        ifconfig eth0 192.168.93.42 netmask 255.255.255.0
+    else
+        ifconfig eth0 add 192.168.93.42
+    fi
+elif [ -h "/sys/class/net/wlan0" ]; then
+	eth="wlan0"
+	ifconfig wlan0 up
+fi
+
+if [ "x${eth}" != "x" ]; then
+	mac=$(ifconfig ${eth} | grep HWaddr | awk '{print $5}' | sed 's/://g')
+	hn="efikamx-installer-${mac}"
+	sed -i -e s/^127\.0\.1\.1.*/127\.0\.1\.1\ $hn/g "/etc/hosts"
+	echo $hn >"/etc/hostname"
+	hostname $hn
+fi
+
+
+#set up the leds to signal we are unconfigured and on the network
+#Blinking red = booted in installer mode
+#Blinking yellow = booted in initial setup mode
+
+for i in red blue green
+do
+#Disable all power leds
+echo 0 >/sys/class/leds/efikamx:$i/brightness
+done
+#Installer indicator
+if [ -f /home/oem/root.tar.xz ]
+then
+	echo timer >/sys/class/leds/efikamx:red/trigger
+	echo 900 >/sys/class/leds/efikamx:red/delay_on
+	echo 1000 >/sys/class/leds/efikamx:red/delay_off
+fi
+
+#Blink yellow for setup.
+if [ ! -f /home/oem/root.tar.xz ]
+then
+	echo timer | tee /sys/class/leds/efikamx:green/trigger /sys/class/leds/efikamx:red/trigger >/dev/null
+	echo 900 | tee /sys/class/leds/efikamx:green/delay_on /sys/class/leds/efikamx:red/delay_on >/dev/null
+	echo 1000 | tee /sys/class/leds/efikamx:green/delay_off /sys/class/leds/efikamx:red/delay_off >/dev/null
+fi
+exit 0

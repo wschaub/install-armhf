@@ -1,0 +1,185 @@
+#!/bin/sh
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH
+#Steubentech experimental EfikaMX headless image config script
+
+#Give the user a chance to back out and then run the oem-installer script
+install() {
+    if [ -f /home/oem/root.tar.xz ]
+    then
+        unset choice
+        echo -n "This will wipe out your internal SSD disk are you sure (Y/N)?"
+        read choice
+        case $choice in
+            Y) ./installer;;
+            y) ./installer;;
+            *) menu;;
+        esac
+    else
+        echo "This is not an installer disk running first time setup instead"
+        setup
+    fi
+
+}
+
+#Set up the system to run normally with a network config, timezone
+#and an initial user with admin privs.
+setup() {
+    unset choice
+    if [ -f /home/oem/root.tar.xz ]
+    then
+        echo -n "Discard the installer and set up to run off this SD card (Y/N) "
+    else
+        echo -n "Perform initial setup(Y/N) "
+    fi
+    read choice
+    case $choice in 
+        Y);;
+        y);;
+        *) menu;;
+    esac
+
+    #Change LED status to setup
+    echo timer | tee /sys/class/leds/efikamx:green/trigger /sys/class/leds/efikamx:red/trigger >/dev/null
+    echo 900 | tee /sys/class/leds/efikamx:green/delay_on /sys/class/leds/efikamx:red/delay_on >/dev/null
+    echo 1000 | tee /sys/class/leds/efikamx:green/delay_off /sys/class/leds/efikamx:red/delay_off >/dev/null
+
+    rm -f /home/oem/root.tar.xz
+
+
+    echo -n "Enter hostname: "
+    read hostname
+
+    echo -n "Use DHCP (Y/N)?"
+    read choice
+    case $choice in
+        Y) dhcp="yes";;
+        y) dhcp="yes";;
+        *) dhcp="no";;
+    esac
+
+    if [ "$dhcp" = "no" ]
+    then
+        echo "Static IP settings."
+        echo -n "IP address: "
+        read ip
+        echo -n "Netmask: "
+        read netmask
+        echo -n "Gateway: "
+        read gateway
+
+        echo "Resolver Settings"
+        echo -n "Name server: "
+        read nameserver
+    else
+        ip="N/A"
+        netmask="N/A"
+        gateway="N/A"
+        nameserver="N/A"
+    fi
+
+    cat <<EOF
+    You chose the following settings:
+Network:
+hostname = $hostname
+use DHCP = $dhcp
+IP address = $ip
+Netmask = $netmask
+Gateway = $gateway
+Nameserver = $nameserver
+
+Do you wish to continue with these settings(Y/N)?
+EOF
+    read choice
+    case $choice in 
+        Y);;
+        y);;
+        *) setup;;
+    esac
+
+    #create network files
+    
+    #/etc/network/interfaces
+    echo >>/etc/network/interfaces
+    echo "auto eth0" >>/etc/network/interfaces
+    if [ "$dhcp" = "yes" ]
+    then
+        echo "iface eth0 inet dhcp" >>/etc/network/interfaces
+    else
+        echo "iface eth0 inet static" >>/etc/network/interfaces
+        echo "    address $ip" >>/etc/network/interfaces
+        echo "    netmask $netmask" >>/etc/network/interfaces
+        echo "    gateway $gateway" >>/etc/network/interfaces
+        #/etc/resolv.conf
+        echo "nameserver $nameserver" >/etc/resolv.conf
+    fi
+    #/etc/hostname
+    echo "$hostname" >/etc/hostname
+    #/etc/hosts
+    cat >/etc/hosts <<EOF
+127.0.0.1 $hostname localhost
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+ff02::3 ip6-allhosts
+EOF
+
+    #create new SSH host keys
+    echo "re-generating SSH keys"
+    echo "Creating /etc/ssh/ssh_host_key"
+    rm -f /etc/ssh/ssh_host_key.* /etc/ssh/ssh_host_key
+    ssh-keygen -q -f /etc/ssh/ssh_host_key -N '' -t rsa1
+    echo "Creating /etc/ssh/ssh_host_rsa_key"
+    rm -f /etc/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_rsa_key.*
+    ssh-keygen -q -f /etc/ssh/ssh_host_rsa_key -N '' -t rsa
+    echo "Creating /etc/ssh/ssh_host_dsa_key"
+    rm -f /etc/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_rsa_key.*
+    ssh-keygen -q -f /etc/ssh/ssh_host_rsa_key -N '' -t dsa
+
+    #set up time zone
+    dpkg-reconfigure tzdata
+
+    #create new user
+    #XXX! TODO test and implement support for encrypting home directory
+    echo "Creating user account"
+    export DEBIAN_PRIORITY=low
+    user-setup
+    #put back config files/init scripts
+    echo "requiring password for sudo"
+    cp /home/oem/sudoers /etc/
+    echo "removing /etc/init.d/oemrc"
+    insserv -r /etc/init.d/oemrc
+    rm -f /etc/init.d/oemrc
+
+
+    #clean up and remove the oem user and setup scripts.
+    echo "removing oem user"
+    userdel -rf oem
+
+    #restart
+    echo "restarting the system"
+    shutdown -r now
+}
+
+menu() {
+echo "Please enter one of the following menu choices:"
+if [ -f /home/oem/root.tar.xz ]
+then
+    echo "i -- Install to internal disk"
+    echo "r -- Run direct from SD card"
+else
+    echo "r -- Run initial setup"
+fi
+echo "s -- drop to a shell"
+	read choice 
+	case $choice in
+        i) install ;;
+		r) setup ;;
+		s) exit 0;;
+		*) menu;;
+	esac
+}
+menu

@@ -1,9 +1,10 @@
 #!/bin/sh
 TARGETROOT=/mnt
 DEV=$1
+set -e
 mount $DEV $TARGETROOT
-cp oem.tgz $TARGETROOT
-chroot $TARGETROOT tar xzvf oem.tgz
+tar cvf $TARGETROOT/oem.tar home
+chroot $TARGETROOT tar xvf oem.tar
 chroot $TARGETROOT useradd -u 700 oem
 chroot $TARGETROOT chown -R oem:oem /home/oem
 chroot $TARGETROOT cp /home/oem/sudoers-nopass /etc/sudoers
