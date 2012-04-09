@@ -87,7 +87,12 @@ TARGETBOOT=$TARGETROOT/boot
 mkdir $TARGETROOT/boot
 mount $BOOTPART $TARGETBOOT
 xzcat root.tar.xz | (cd $TARGETROOT; tar  xvpf -)
-cp root.tar.xz $TARGETROOT/home/oem/
+#only bother to copy root.tar.xz if the headless installer
+#is part of the image. This way we can reuse this script for
+#installing other images as well.
+if [ -d $TARGETROOT/home/oem ]; then
+    cp root.tar.xz $TARGETROOT/home/oem/
+fi
 umount $TARGETBOOT
 umount $TARGETROOT
 echo "All done, you are ready to put the SD card in your Efika and boot it."
