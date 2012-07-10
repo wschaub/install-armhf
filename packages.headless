@@ -10,3 +10,4 @@ busybox
 firmware-linux-free
 less
 vim-tiny
+libnss-mdns

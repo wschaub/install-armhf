@@ -1,5 +1,6 @@
 ngetty
 locales
+locales-all
 wicd
 slim
 xorg
@@ -24,3 +25,4 @@ less
 vim
 console-setup
 user-setup
+libnss-mdns
