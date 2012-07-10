@@ -13,4 +13,4 @@ MIRROR=http://ftp.us.debian.org/debian
 
 # Kernel version and revision of the kernel package that is in kernels/ dir.
 KERNELVER=2.6.31.14.27-efikamx
-KERNELREV=33456102
+KERNELREV=33456102+sdmafix
