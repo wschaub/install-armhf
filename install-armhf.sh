@@ -1,6 +1,23 @@
 #!/bin/bash
 #Load in defaults
 . ./defaults
+#exit if we are not root or any of the commands we depend on can not 
+#be found in our path.
+depends() {
+    if [ $EUID -ne 0 ]; then
+        echo "This script must be run as root"
+        exit 1
+    fi
+    for i in mkfs.ext2 mkfs.ext4 parted debootstrap
+    do
+        which $i >/dev/null
+        if [ $? -ne 0 ]; then
+            echo "I can't find $i please install it and try again"
+            exit 1
+        fi
+    done
+}
+
 usage(){
 cat <<EOF
 Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] ssd|mmc device [--genimage]
@@ -68,6 +85,8 @@ if [ $MEDIA != "mmc" ] && [ $MEDIA != "ssd" ]; then
 	echo "Media type must be either ssd or mmc type $0 -h for more information"
 	exit 1
 fi
+#check if we are root and have the right utilities in our path.
+depends
 #These have to be here to support armel and armhf kernel images
 #ARCH only gets reset from defaults after getopts processing. 
 KERNELDEB=linux-image-${KERNELVER}_${KERNELREV}_$ARCH.deb
