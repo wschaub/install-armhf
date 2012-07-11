@@ -8,7 +8,7 @@ depends() {
         echo "This script must be run as root"
         exit 1
     fi
-    for i in mkfs.ext2 mkfs.ext4 parted debootstrap
+    for i in mkfs.ext2 mkfs.ext4 parted pv debootstrap
     do
         which $i >/dev/null
         if [ $? -ne 0 ]; then
