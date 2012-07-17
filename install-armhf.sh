@@ -87,6 +87,11 @@ if [ $MEDIA != "mmc" ] && [ $MEDIA != "ssd" ]; then
 fi
 #check if we are root and have the right utilities in our path.
 depends
+
+#Load in hooks for our currrent suite (distribution) if they exist
+if [ -f $SUITE.hooks ]; then
+    . $SUITE.hooks
+fi
 #These have to be here to support armel and armhf kernel images
 #ARCH only gets reset from defaults after getopts processing. 
 KERNELDEB=linux-image-${KERNELVER}_${KERNELREV}_$ARCH.deb
@@ -215,6 +220,8 @@ echo "done"
 
 echo "installing extra packages:"
 cp packages.$TYPE $TARGETROOT/packages.extra
+#run hook_packages if it exists
+declare -F hook_packages && hook_packages
 if [ "$TASKSEL" = "yes" ]; then
     echo tasksel >>$TARGETROOT/packages.extra
 fi
@@ -232,6 +239,8 @@ if [ "$INTERACTIVE" = "yes" ]; then
     chroot $TARGETROOT dpkg-reconfigure console-setup
     chroot $TARGETROOT dpkg-reconfigure tzdata
     chroot $TARGETROOT user-setup
+    #run the interactive hook if defined
+    declare -F hook_interactive && hook_interactive
 fi
 if [ "$TASKSEL" = "yes" ]; then
     chroot $TARGETROOT tasksel --new-install
@@ -337,6 +346,8 @@ echo -n "copying wireless device firmware..."
 cp firmware/rt*.bin $TARGETROOT/lib/firmware/
 echo "done"
 
+#run fixup hook if it exists
+declare -F hook_fixup && hook_fixup
 #image is done.
 echo -n "unmounting filesystems..."
 umount $TARGETBOOT

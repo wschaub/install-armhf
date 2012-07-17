@@ -1,0 +1,15 @@
+Hooks are defined in distributionnamehere.hooks files.
+these files define shell functions that are run at various times during the install-armhf script.
+This was done to allow fixes for release specific quirks without having to modify the main script.
+
+Available hooks:
+hook_packages -- runs just after debootstrap to allow you to add packages to 
+$TARGETROOT/packages.extra (or anything else that might need to be done at that point in the script)
+
+hook_interactive -- runs right after user-setup if the script is run in interactive mode. 
+you sould put anything here that might prompt the user to do something extra. 
+
+hook_fixup -- runs at the very end before the target root is un-mounted.
+this hook should be used to edit stock config files or anything else that doesn't end up right out of the box (and isn't being done in or belong in the main script)
+
+
