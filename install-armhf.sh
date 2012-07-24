@@ -8,7 +8,7 @@ depends() {
         echo "This script must be run as root"
         exit 1
     fi
-    for i in mkfs.ext2 mkfs.ext4 parted pv debootstrap
+    for i in mkfs.ext2 mkfs.ext4 parted pv cdebootstrap
     do
         which $i >/dev/null
         if [ $? -ne 0 ]; then
@@ -20,7 +20,7 @@ depends() {
 
 usage(){
 cat <<EOF
-Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] ssd|mmc device [--genimage]
+Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] [ --genimage] [ --tasksel ] ssd|mmc device 
 
 Options:
 -a select the arch to use (armel or armhf) default is armhf
@@ -90,6 +90,7 @@ depends
 
 #Load in hooks for our currrent suite (distribution) if they exist
 if [ -f $SUITE.hooks ]; then
+    echo "Loading hooks for $SUITE"
     . $SUITE.hooks
 fi
 #These have to be here to support armel and armhf kernel images
@@ -101,7 +102,7 @@ PREPKERNELDEB=prep-kernel_2.0.0-20110719_$ARCH.deb
 if [ $TYPE = "minimal" ]
 then
 	DBSOPTS="--variant=minbase"
-	APTITUDE="apt-get -y install"
+	APTITUDE="apt-get -y "
 fi
 
 if [ -z $DEVICE ] || [ ! -b $DEVICE ]; then
@@ -118,9 +119,11 @@ echo MIRROR=$MIRROR
 echo ARCH=$ARCH
 echo SUITE=$SUITE
 echo GENIMAGE=$GENIMAGE
+echo TASKSEL=$TASKSEL
 echo TYPE=$TYPE
 echo MEDIA=$MEDIA
 echo DEVICE=$DEVICE
+
 
 if [[ $DEVICE =~ \/dev\/mmcblk* ]]; then
     echo "MMC card device, partitions named mmcblk*pN..."
@@ -205,13 +208,13 @@ if [ -d $TARGETROOT ]; then
     echo "done"
 fi
 
-echo "running debootstrap:"
-debootstrap $DBSOPTS --arch=$ARCH $SUITE $TARGETROOT $MIRROR
+echo "running cdebootstrap:"
+cdebootstrap $DBSOPTS --arch=$ARCH $SUITE $TARGETROOT $MIRROR
 if [ $? != 0 ]; then
-    echo "error on debootstrap, exiting!"
+    echo "error on cdebootstrap, exiting!"
     exit 1
 fi
-echo "done debootstrapping."
+echo "done cdebootstrapping."
 
 echo "disable starting up services in the chroot..."
 echo -e "#!/bin/sh\nexit 101" > $TARGETROOT/usr/sbin/policy-rc.d
@@ -231,9 +234,10 @@ mount -o bind /dev/pts $TARGETROOT/dev/pts
 #temporarily disable debconf prompts so we don't prompt to configure things
 #twice.
 export DEBIAN_FRONTEND=noninteractive
-chroot $TARGETROOT $APTITUDE `cat $TARGETROOT/packages.extra`
+chroot $TARGETROOT $APTITUDE update
+chroot $TARGETROOT $APTITUDE install `cat $TARGETROOT/packages.extra`
 if [ "$INTERACTIVE" = "yes" ]; then
-    chroot $TARGETROOT $APTITUDE locales console-setup tzdata user-setup
+    chroot $TARGETROOT $APTITUDE install locales console-setup tzdata user-setup
     unset DEBIAN_FRONTEND
     chroot $TARGETROOT dpkg-reconfigure locales
     chroot $TARGETROOT dpkg-reconfigure console-setup

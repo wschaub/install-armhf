@@ -7,7 +7,7 @@ INTERACTIVE=yes
 TASKSEL=no
 MEDIA="invalidmediatype"
 DEVICE=""
-APTITUDE="aptitude -y install"
+APTITUDE="aptitude -y "
 # Change this to your own mirror
 MIRROR=http://ftp.us.debian.org/debian
 
