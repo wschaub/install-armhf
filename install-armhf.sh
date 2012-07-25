@@ -236,11 +236,13 @@ mount -o bind /dev/pts $TARGETROOT/dev/pts
 export DEBIAN_FRONTEND=noninteractive
 chroot $TARGETROOT $APTITUDE update
 chroot $TARGETROOT $APTITUDE install `cat $TARGETROOT/packages.extra`
+chroot $TARGETROOT apt-get clean
 if [ "$INTERACTIVE" = "yes" ]; then
     chroot $TARGETROOT $APTITUDE install locales console-setup tzdata user-setup
     unset DEBIAN_FRONTEND
     if [ "$TASKSEL" = "yes" ]; then
         chroot $TARGETROOT tasksel --new-install
+        chroot $TARGETROOT apt-get clean
     fi
     chroot $TARGETROOT dpkg-reconfigure locales
     chroot $TARGETROOT dpkg-reconfigure console-setup
