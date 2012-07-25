@@ -239,15 +239,15 @@ chroot $TARGETROOT $APTITUDE install `cat $TARGETROOT/packages.extra`
 if [ "$INTERACTIVE" = "yes" ]; then
     chroot $TARGETROOT $APTITUDE install locales console-setup tzdata user-setup
     unset DEBIAN_FRONTEND
+    if [ "$TASKSEL" = "yes" ]; then
+        chroot $TARGETROOT tasksel --new-install
+    fi
     chroot $TARGETROOT dpkg-reconfigure locales
     chroot $TARGETROOT dpkg-reconfigure console-setup
     chroot $TARGETROOT dpkg-reconfigure tzdata
     chroot $TARGETROOT user-setup
     #run the interactive hook if defined
     declare -F hook_interactive && hook_interactive
-fi
-if [ "$TASKSEL" = "yes" ]; then
-    chroot $TARGETROOT tasksel --new-install
 fi
 chroot $TARGETROOT apt-get clean
 rm $TARGETROOT/packages.extra
