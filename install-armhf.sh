@@ -355,9 +355,9 @@ declare -F hook_fixup && hook_fixup
 #image is done.
 echo -n "unmounting filesystems..."
 umount $TARGETBOOT
-umount $TARGETROOT/proc
-umount $TARGETROOT/dev/pts
-umount $TARGETROOT/dev
+umount -l $TARGETROOT/proc
+umount -l $TARGETROOT/dev/pts
+umount -l $TARGETROOT/dev
 umount $TARGETROOT
 echo "done"
 
