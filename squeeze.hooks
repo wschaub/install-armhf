@@ -1,0 +1,23 @@
+hook_packages(){
+    echo "running hook_packages"
+    #handle special case of the minimal type
+    #which uses the minimal flavor of cdebootstrap instead of standard.
+    if [ "$TYPE" = "minimal" ]; then
+        #we want to install ifupdown so we get network tools
+        #we want minimal but not *that* minimal.
+        chroot $TARGETROOT apt-get -y update
+        chroot $TARGETROOT apt-get -y install ifupdown
+        #remove the wrong uboot package from the list
+        sed -i '/u-boot-tools/d' $TARGETROOT/packages.extra
+    fi
+
+    #fill in /etc/network/interfaces which seems to end up empty
+    #after debootstrap
+    #We do this early to ensure that things installed later on can
+    #edit out the eth0 entry (like network-manager does)
+    echo "auto lo" >>$TARGETROOT/etc/network/interfaces
+    echo "iface lo inet loopback" >>$TARGETROOT/etc/network/interfaces
+    echo "auto eth0" >>$TARGETROOT/etc/network/interfaces
+    echo "iface eth0 inet dhcp" >>$TARGETROOT/etc/network/interfaces
+
+}

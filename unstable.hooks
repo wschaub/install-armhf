@@ -1,0 +1,14 @@
+hook_packages(){
+    echo "running hook_packages"
+    #handle special case of the minimal type
+    #which uses the minimal flavor of cdebootstrap instead of standard.
+    if [ "$TYPE" = "minimal" ]; then
+        #we want to install ifupdown so we get network tools
+        #we want minimal but not *that* minimal.
+        chroot $TARGETROOT apt-get -y update
+        chroot $TARGETROOT apt-get -y install ifupdown
+        #remove the wrong uboot package from the list
+        sed -i '/uboot-mkimage/d' $TARGETROOT/packages.extra
+    fi
+
+}
