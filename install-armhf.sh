@@ -101,7 +101,7 @@ PREPKERNELDEB=prep-kernel_2.0.0-20110719_$ARCH.deb
 #Speical case for minimal install type.
 if [ $TYPE = "minimal" ]
 then
-	DBSOPTS="--variant=minbase"
+	DBSOPTS="-f minimal"
 	APTITUDE="apt-get -y "
 fi
 

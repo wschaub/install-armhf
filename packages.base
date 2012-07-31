@@ -1,6 +1,6 @@
 locales
 locales-all
-u-boot
+uboot-mkimage
 u-boot-tools
 parted
 whois

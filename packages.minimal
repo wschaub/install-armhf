@@ -1,7 +1,7 @@
 locales
 locales-all
-u-boot
 u-boot-tools
+uboot-mkimage
 parted
 whois
 initramfs-tools

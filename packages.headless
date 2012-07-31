@@ -1,7 +1,7 @@
 locales
 locales-all
 wicd-curses
-u-boot
+uboot-mkimage
 u-boot-tools
 parted
 whois
