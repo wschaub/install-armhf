@@ -8,6 +8,7 @@ TASKSEL=no
 MEDIA="invalidmediatype"
 DEVICE=""
 APTITUDE="aptitude -y "
+DEBOOTSTRAP=debootstrap
 # Change this to your own mirror
 MIRROR=http://ftp.us.debian.org/debian
 

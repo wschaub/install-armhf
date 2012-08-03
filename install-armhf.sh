@@ -8,7 +8,7 @@ depends() {
         echo "This script must be run as root"
         exit 1
     fi
-    for i in mkfs.ext2 mkfs.ext4 parted pv cdebootstrap
+    for i in mkfs.ext2 mkfs.ext4 parted pv $DEBOOTSTRAP
     do
         which $i >/dev/null
         if [ $? -ne 0 ]; then
@@ -20,21 +20,25 @@ depends() {
 
 usage(){
 cat <<EOF
-Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] [ --genimage] [ --tasksel ] ssd|mmc device 
+Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] [ -m mirror ] [ --genimage] [ --tasksel ] [ --cdebootstrap ] ssd|mmc device 
 
 Options:
 -a select the arch to use (armel or armhf) default is armhf
 
 -d select the debian distribution (testing, wheezy, unstable etc) default is unstable
 
--t select the install type (desktop or minimal) 
+-t select the install type (desktop, base or minimal) 
 you can define your own set of packages by creating a file named packages.yourtypenamehere
 
 -q  Do not prompt to configure packages
 
+-m select a differnt mirror from the default
+
 --genimage Generate an image file after setting up the media.
 
 --tasksel Run tasksel after installing the image.
+
+--cdebootstrap use cdebootstrap instead of debootstrap.
 
 Non option arguments:
 The last two arguments are the media type (ssd or mmc) and the device to install to.
@@ -101,8 +105,13 @@ PREPKERNELDEB=prep-kernel_2.0.0-20110719_$ARCH.deb
 #Speical case for minimal install type.
 if [ $TYPE = "minimal" ]
 then
-	DBSOPTS="-f minimal"
-	APTITUDE="apt-get -y "
+    if [ "$DEBOOTSTRAP" = "debootstrap" ];then
+        DBSOPTS="--variant=minbase"
+    else
+        DBSOPTS="-f minimal"
+    fi
+        APTITUDE="apt-get -y "
+    
 fi
 
 if [ -z $DEVICE ] || [ ! -b $DEVICE ]; then
@@ -208,13 +217,13 @@ if [ -d $TARGETROOT ]; then
     echo "done"
 fi
 
-echo "running cdebootstrap:"
-cdebootstrap $DBSOPTS --arch=$ARCH $SUITE $TARGETROOT $MIRROR
+echo "running $DEBOOTSTRAP:"
+$DEBOOTSTRAP $DBSOPTS --arch=$ARCH $SUITE $TARGETROOT $MIRROR
 if [ $? != 0 ]; then
-    echo "error on cdebootstrap, exiting!"
+    echo "error on $DEBOOTSTRAP, exiting!"
     exit 1
 fi
-echo "done cdebootstrapping."
+echo -e "done $DEBOOTSTRAP\ping."
 
 echo "disable starting up services in the chroot..."
 echo -e "#!/bin/sh\nexit 101" > $TARGETROOT/usr/sbin/policy-rc.d
