@@ -110,7 +110,7 @@ then
     else
         DBSOPTS="-f minimal"
     fi
-        APTITUDE="apt-get -y "
+    APTITUDE="apt-get -y "
     
 fi
 
@@ -223,7 +223,7 @@ if [ $? != 0 ]; then
     echo "error on $DEBOOTSTRAP, exiting!"
     exit 1
 fi
-echo -e "done $DEBOOTSTRAP\ping."
+echo -e "finished running $DEBOOTSTRAP"
 
 echo "disable starting up services in the chroot..."
 echo -e "#!/bin/sh\nexit 101" > $TARGETROOT/usr/sbin/policy-rc.d
