@@ -1,6 +1,6 @@
 setenv ramdisk uInitrd;
 setenv kernel uImage;
-setenv bootargs console=ttymxc0,115200 earlyprintk=serial root=LABEL=rootsd rw rootwait;
+setenv bootargs console=ttymxc0,115200 earlyprintk=serial console=tty1 root=LABEL=rootsd rw rootwait;
 ${loadcmd} ${ramdiskaddr} ${ramdisk};
 if imi ${ramdiskaddr}; then; else
   setenv bootargs ${bootargs} noinitrd;
