@@ -9,3 +9,5 @@ busybox
 firmware-linux-free
 less
 vim-tiny
+libterm-readkey-perl
+whiptail

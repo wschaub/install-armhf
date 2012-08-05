@@ -21,3 +21,14 @@ hook_packages(){
     echo "iface eth0 inet dhcp" >>$TARGETROOT/etc/network/interfaces
 
 }
+
+hook_interactive() {
+#allow us to log into the chroot if we want to.
+    read -p "Start a shell inside the chroot yes/no?:" yesno
+    if [ "$yesno" = "yes" ]; then
+        echo "Entering chroot"
+        chroot $TARGETROOT
+    fi
+
+}
+
