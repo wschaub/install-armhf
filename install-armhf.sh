@@ -20,7 +20,7 @@ depends() {
 
 usage(){
 cat <<EOF
-Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] [ -m mirror ] [ --genimage] [ --tasksel ] [ --cdebootstrap ] [ -l file | [ ssd|mmc|loop device ] ]
+Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] [ -m mirror ] [ --genimage] [ --tasksel ] [ --cdebootstrap ]  -l file |  ssd|mmc|loop device 
 
 Options:
 -a select the arch to use (armel or armhf) default is armhf
