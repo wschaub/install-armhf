@@ -61,7 +61,7 @@ cleanup() {
     echo "done"
     echo "removing $TARGETROOT"
     rm -rf $TARGETROOT
-    if [ "$LOOPFILE" != ""]; then
+    if [ "$LOOPFILE" != "" ]; then
         echo "Detaching $DEVICE"
         losetup -d $DEVICE
     fi
