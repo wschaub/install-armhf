@@ -325,13 +325,10 @@ chroot $TARGETROOT mkimage -A arm -O linux -T script -C none -a 0x0 -e 0x0 -n "E
 echo "done preparing uImage,uInitrd,boot.scr."
 
 echo -n "copying uImage/uInitrd/boot.scr to $BOOTPART..."
-cp $TARGETROOT/boot/uImage-$KERNELVER $TARGETBOOT/
 (cd $TARGETBOOT && ln -s uImage-$KERNELVER uImage)
 if [ -f $TARGETROOT/boot/uInitrd-$KERNELVER ]; then
-    cp $TARGETROOT/boot/uInitrd-$KERNELVER $TARGETBOOT/
     (cd $TARGETBOOT && ln -s uInitrd-$KERNELVER uInitrd)
 fi
-cp $TARGETROOT/boot/boot.scr* $TARGETBOOT/
 echo "done"
 
 echo "Installing prep-kernel"
