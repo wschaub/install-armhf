@@ -20,7 +20,7 @@ depends() {
 
 usage(){
 cat <<EOF
-Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] [ -m mirror ] [ --genimage] [ --tasksel ] [ --cdebootstrap ] ssd|mmc device 
+Usage: $0 [ -a armel|armhf ] [ -q ] [ -d distribution ] [ -t type ] [ -m mirror ] [ --genimage] [ --tasksel ] [ --cdebootstrap ] [ -l file | [ ssd|mmc|loop device ] ]
 
 Options:
 -a select the arch to use (armel or armhf) default is armhf
@@ -34,6 +34,8 @@ you can define your own set of packages by creating a file named packages.yourty
 
 -m select a differnt mirror from the default
 
+-l attach file using losetup and install onto it. (requires max_part=63 passed to loop module)
+
 --genimage Generate an image file after setting up the media.
 
 --tasksel Run tasksel after installing the image.
@@ -46,10 +48,41 @@ EOF
 exit 1
 }
 
+#ensure we clean up after ourselves, even if we exit early. 
+#NOTE: this should only be registerd by trap after we have mounted
+#the filesystems.
+cleanup() {
+    echo -n "unmounting filesystems..."
+    umount $TARGETBOOT
+    umount -l $TARGETROOT/proc
+    umount -l $TARGETROOT/dev/pts
+    umount -l $TARGETROOT/dev
+    umount $TARGETROOT
+    echo "done"
+    echo "removing $TARGETROOT"
+    rm -rf $TARGETROOT
+    if [ "$LOOPFILE" != ""]; then
+        echo "Detaching $DEVICE"
+        losetup -d $DEVICE
+    fi
+}
+
+#Handle the -l option and attach a loop device.
+attach_loop () {
+      LOOPFILE=$1;
+      MEDIA="loop";
+      DEVICE=`losetup --show -f $LOOPFILE`;
+      if [ $? -ne 0 ]; then
+          echo "Couldn't attach loop device to $LOOPFILE"
+          exit 1
+      fi
+      echo "Successfully attached $LOOPFILE to $DEVICE"
+}
+
 if [ $# -lt 2 ]; then
 	usage
 fi
-optspec=":qd:t:a:m:-:"
+optspec=":qd:t:a:m:l:-:"
 while getopts "$optspec" optchar; do
    case "${optchar}" in
    -)
@@ -74,6 +107,9 @@ while getopts "$optspec" optchar; do
    m)
       MIRROR=$OPTARG;
       ;;
+  l)
+      attach_loop $OPTARG;
+      ;;
    q)
       INTERACTIVE=no;
       export DEBIAN_FRONTEND=noninteractive;
@@ -82,11 +118,15 @@ while getopts "$optspec" optchar; do
 esac
 done
 #handle non option arguments and do sanity checks
-MEDIA=${!OPTIND}
-OPTIND=$(( $OPTIND + 1))
-DEVICE=${!OPTIND}
-if [ $MEDIA != "mmc" ] && [ $MEDIA != "ssd" ]; then
-	echo "Media type must be either ssd or mmc type $0 -h for more information"
+if [ "$LOOPFILE" = "" ]; then
+#bypass this step if the -l option is used.
+    MEDIA=${!OPTIND}
+    OPTIND=$(( $OPTIND + 1))
+    DEVICE=${!OPTIND}
+fi
+
+if [ $MEDIA != "mmc" ] && [ $MEDIA != "ssd" ] && [ $MEDIA != "loop" ]; then
+	echo "Media type must be either ssd, mmc or loop type $0 -h for more information"
 	exit 1
 fi
 #check if we are root and have the right utilities in our path.
@@ -138,6 +178,10 @@ if [[ $DEVICE =~ \/dev\/mmcblk* ]]; then
     echo "MMC card device, partitions named mmcblk*pN..."
     BOOTPART=${DEVICE}p1
     ROOTPART=${DEVICE}p2
+elif [[ $DEVICE =~ \/dev\/loop* ]]; then
+    echo "loop device, partitions named loop*pN..."
+    BOOTPART=${DEVICE}p1
+    ROOTPART=${DEVICE}p2
 elif [[ $DEVICE =~ \/dev\/sd* ]]; then
     echo "Generic SCSI block device, partitions named sd*N..."
     BOOTPART=${DEVICE}1
@@ -148,6 +192,9 @@ else
 fi
 
 if [ $MEDIA == "mmc" ]; then
+     BOOTNAME=bootsd
+     ROOTNAME=rootsd
+elif [ $MEDIA == "loop" ]; then
      BOOTNAME=bootsd
      ROOTNAME=rootsd
 elif [ $MEDIA == "ssd" ]; then
@@ -199,7 +246,16 @@ echo -n "creating root partition..."
 parted $DEVICE --align optimal --script -- mkpart primary 128 -1
 echo "done"
 
+#Make extra sure that the block device for the partition works
+#this is to catch systems that use the loop option without the
+#correct arguments to the loop module.
+if [ -z $ROOTPART ] || [ ! -b $ROOTPART ]; then
+    echo -n "$ROOTPART does not exist! this probably means you are using "
+    echo "the loop module without passing it max_part=63"
+    exit 1
+fi
 echo -n "preparing boot partition in $BOOTPART..."
+
 mkfs.ext2 -L $BOOTNAME -q $BOOTPART
 echo "done"
 
@@ -216,7 +272,8 @@ if [ -d $TARGETROOT ]; then
     mount $ROOTPART $TARGETROOT
     echo "done"
 fi
-
+#register exit handler here after we mount the filesystem. 
+trap cleanup EXIT
 echo "running $DEBOOTSTRAP:"
 $DEBOOTSTRAP $DBSOPTS --arch=$ARCH $SUITE $TARGETROOT $MIRROR
 if [ $? != 0 ]; then
@@ -361,17 +418,11 @@ echo "done"
 #run fixup hook if it exists
 declare -F hook_fixup && hook_fixup
 #image is done.
-echo -n "unmounting filesystems..."
-umount $TARGETBOOT
-umount -l $TARGETROOT/proc
-umount -l $TARGETROOT/dev/pts
-umount -l $TARGETROOT/dev
-umount $TARGETROOT
-echo "done"
-
-rm -rf $TARGETROOT
 
 if [ $GENIMAGE == "yes" ]; then
    echo "Making image $ARCH-$SUITE.img"
    dd if=$DEVICE bs=32768 |pv >$ARCH-$SUITE.img
 fi
+#Since the script can exit early it is a good idea to have
+#a message that confirms we got to the end with no problems.
+echo "Successfully finished installing $SUITE onto $DEVICE"
