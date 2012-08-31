@@ -1,0 +1,41 @@
+hook_packages(){
+    echo "running hook_packages"
+    #precise does not pull in aptitude like Debian does.
+    #handle special case of the minimal type
+    #which uses the minimal flavor of cdebootstrap instead of standard.
+    if [ "$TYPE" = "minimal" ]; then
+        #remove the wrong uboot package from the list
+        sed -i '/uboot-mkimage/d' $TARGETROOT/packages.extra
+        sed -i '/locales-all/d' $TARGETROOT/packages.extra
+        #we have to install ifupdown here otherwise editing 
+        #/etc/network/interfaces will not work correctly.
+        chroot $TARGETROOT apt-get -y update
+        chroot $TARGETROOT apt-get -y install ifupdown
+	else
+		#precise does not pull in aptitude even in non-minimal installs
+		#locales-all also does not exist so pull in at least the en
+		#stuff here.
+		chroot $TARGETROOT apt-get -y install aptitude language-pack-en
+    fi
+
+}
+
+hook_interactive() {
+#allow us to log into the chroot if we want to.
+    read -p "Start a shell inside the chroot yes/no?:" yesno
+    if [ "$yesno" = "yes" ]; then
+        echo "Entering chroot"
+        chroot $TARGETROOT
+    fi
+
+}
+
+hook_fixup() {
+	#precise does not create /dev/root this is needed by 
+	#both flash-kernel and prep-kernel to figure out %ROOTPARTITION%
+	cp precise.files/write_dev_root_rule $TARGETROOT/lib/udev/
+	cp precise.files/60-write-dev-root.rules $TARGETROOT/etc/udev/rules.d/
+
+	#add efikamx to /etc/hosts (for sudo and other things.)
+	echo "127.0.1.1 efikamx" >>$TARGETROOT/etc/hosts
+}
