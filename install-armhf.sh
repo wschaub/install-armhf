@@ -305,11 +305,13 @@ chroot $TARGETROOT $APTITUDE install `cat $TARGETROOT/packages.extra`
 chroot $TARGETROOT apt-get clean
 if [ "$INTERACTIVE" = "yes" ]; then
     chroot $TARGETROOT $APTITUDE install locales console-setup tzdata user-setup
+    chroot $TARGETROOT $APTITUDE install keyboard-configuration
     unset DEBIAN_FRONTEND
     if [ "$TASKSEL" = "yes" ]; then
         chroot $TARGETROOT tasksel --new-install
         chroot $TARGETROOT apt-get clean
     fi
+    chroot $TARGETROOT dpkg-reconfigure keyboard-configuration
     chroot $TARGETROOT dpkg-reconfigure locales
     chroot $TARGETROOT dpkg-reconfigure console-setup
     chroot $TARGETROOT dpkg-reconfigure tzdata
