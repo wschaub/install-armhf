@@ -79,7 +79,7 @@ echo -n "creating 128MB boot partition..."
 parted $DEVICE --align optimal --script -- mkpart primary 1 128
 parted $DEVICE --script -- set 1 boot on
 echo "done"
-
+partprobe $DEVICE
 echo -n "creating root partition..."
 parted $DEVICE --align optimal --script -- mkpart primary 128 -1
 echo "done"
@@ -112,7 +112,16 @@ fi
 TARGETBOOT=$TARGETROOT/boot
 mkdir $TARGETROOT/boot
 mount $BOOTPART $TARGETBOOT
-xzcat root.tar.xz | (cd $TARGETROOT; tar  xvpf -)
+if [ -f root.tar.xz ]; then
+    xzcat root.tar.xz | (cd $TARGETROOT; tar  --atime-preserve --numeric-owner -xvpf -)
+else
+    if [ -f root.tar ]; then
+        cat root.tar | (cd $TARGETROOT; tar  --atime-preserve --numeric-owner -xvpf -)
+    else
+        echo "can't find an archive to extract!"
+        exit 1
+    fi
+fi
 #only bother to copy root.tar.xz if the headless installer
 #is part of the image. This way we can reuse this script for
 #installing other images as well.
